@@ -1,8 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
+// middleware
 app.use(cors());
 app.use(express.json());
 
@@ -10,7 +11,7 @@ app.get("/", (req, res) => {
   res.send("Server is running fine!");
 });
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri =
   "mongodb+srv://social_eventsDB:5x5xa74E7OQa2yT9@cluster0.6shlkl1.mongodb.net/?appName=Cluster0";
 
@@ -27,6 +28,28 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+
+    const db = client.db("social_db");
+    const eventsCollection = db.collection("events");
+
+    app.post("/events", async (req, res) => {
+      const newEvent = req.body;
+      const result = await eventsCollection.insertOne(newEvent);
+      res.send(result);
+    });
+
+    app.get("/events", async (req, res) => {
+      const cursor = eventsCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/events/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await eventsCollection.findOne(query);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
