@@ -31,6 +31,7 @@ async function run() {
 
     const db = client.db("social_db");
     const eventsCollection = db.collection("events");
+    const joinedCollection = db.collection("joined");
 
     app.post("/events", async (req, res) => {
       const newEvent = req.body;
@@ -78,6 +79,21 @@ async function run() {
         success: true,
         result,
       });
+    });
+
+    app.post("/joined", async (req, res) => {
+      const data = req.body;
+      const result = await joinedCollection.insertOne(data);
+      res.send(result);
+    });
+
+    app.get("/joined-event", async (req, res) => {
+      const email = req.query.email;
+      const result = await joinedCollection
+        .find({ createdBy: email })
+        .sort({ date: 1 })
+        .toArray();
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
