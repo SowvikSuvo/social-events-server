@@ -40,7 +40,9 @@ const verifyToken = async (req, res, next) => {
     });
   }
   const token = authorization.split(" ")[1];
-
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
   try {
     const decode = await admin.auth().verifyIdToken(token);
     next();
@@ -194,30 +196,23 @@ async function run() {
     });
 
     app.delete("/joined-event/:id", async (req, res) => {
-      const { id } = req.params;
-      const email = req.query.email;
-      // 1. Find the event by ID
-      const existing = await joinedCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      if (!existing) {
-        return res.status(404).send({ message: "Event not found" });
+      try {
+        const id = req.params.id;
+        const query = ObjectId.isValid(id)
+          ? { _id: { $in: [id, new ObjectId(id)] } } // match both string or ObjectId
+          : { _id: id };
+
+        const result = await joinedCollection.deleteOne(query);
+
+        if (result.deletedCount === 1) {
+          res.status(200).send({ success: true, message: "Event deleted" });
+        } else {
+          res.status(404).send({ success: false, message: "Event not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting event:", error);
+        res.status(500).send({ success: false, message: "Server error" });
       }
-      // 2. Check ownership
-      if (existing.createdBy !== email) {
-        return res
-          .status(403)
-          .send({ message: "Unauthorized: Cannot delete others’ events" });
-      }
-      // 3. Delete the event
-      const result = await joinedCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
-      res.send({
-        success: true,
-        message: "Joined event deleted successfully",
-        result,
-      });
     });
 
     await client.db("admin").command({ ping: 1 });
