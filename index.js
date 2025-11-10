@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -9,7 +10,7 @@ app.use(express.json());
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./social-events.json");
+const serviceAccount = require("./socialKey.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -20,8 +21,7 @@ app.get("/", (req, res) => {
 });
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri =
-  "mongodb+srv://social_eventsDB:5x5xa74E7OQa2yT9@cluster0.6shlkl1.mongodb.net/?appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6shlkl1.mongodb.net/?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -55,7 +55,6 @@ const verifyToken = async (req, res, next) => {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
     const db = client.db("social_db");
@@ -64,9 +63,6 @@ async function run() {
 
     app.post("/events", async (req, res) => {
       const newEvent = req.body;
-      // if (!newEvent.title || !newEvent.createdBy) {
-      //   return res.status(400).send({ message: "Missing required fields" });
-      // }
 
       const result = await eventsCollection.insertOne(newEvent);
       res.send(result);
@@ -78,11 +74,11 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/events/:id", verifyToken, async (req, res) => {
+    app.get("/events/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await eventsCollection.findOne(query);
-      // if (!result) return res.status(404).send({ message: "Event not found" });
+
       res.send(result);
     });
 
@@ -92,16 +88,13 @@ async function run() {
       const existing = await eventsCollection.findOne({
         _id: new ObjectId(id),
       });
-      // if (!existing)
-      //   return res.status(404).send({ message: "Event not found" });
 
       if (existing.createdBy !== data.createdBy) {
         return res
           .status(403)
           .send({ message: "Unauthorized: Cannot update others’ events" });
       }
-      // console.log(data);
-      // console.log(id);
+
       delete data.createdBy;
 
       const objectId = new ObjectId(id);
@@ -116,6 +109,31 @@ async function run() {
       });
     });
 
+    app.get("/search", async (req, res) => {
+      const search_text = req.query.search;
+      const result = await eventsCollection
+        .find({ title: { $regex: search_text, $options: "i" } })
+        .toArray();
+      res.send(result);
+    });
+
+    app.get("/filter", async (req, res) => {
+      try {
+        const { type } = req.query;
+        const filter = {};
+
+        if (type && type !== "All") {
+          filter.eventType = type;
+        }
+
+        const result = await eventsCollection.find(filter).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error filtering events:", error);
+        res.status(500).send({ message: "Failed to filter events" });
+      }
+    });
+
     app.delete("/events/:id", async (req, res) => {
       const { id } = req.params;
 
@@ -126,7 +144,6 @@ async function run() {
         return res.status(404).send({ message: "Event not found" });
       }
 
-      // 2. Ownership check — only the creator can delete
       if (existing.createdBy !== req.user.email) {
         return res
           .status(403)
@@ -152,23 +169,23 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/manage-event/:id", async (req, res) => {
+    app.delete("/manage-event/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const email = req.query.email;
-      // 1. Find the event by ID
+      //  Find the event by ID
       const existing = await eventsCollection.findOne({
         _id: new ObjectId(id),
       });
       if (!existing) {
         return res.status(404).send({ message: "Event not found" });
       }
-      // 2. Check ownership
+      // Check ownership
       if (existing.createdBy !== email) {
         return res
           .status(403)
           .send({ message: "Unauthorized: Cannot delete others’ events" });
       }
-      // 3. Delete the event
+      //  Delete the event
       const result = await eventsCollection.deleteOne({
         _id: new ObjectId(id),
       });
@@ -179,14 +196,14 @@ async function run() {
       });
     });
 
-    app.post("/joined", async (req, res) => {
+    app.post("/joined", verifyToken, async (req, res) => {
       const data = req.body;
 
       const result = await joinedCollection.insertOne(data);
       res.send(result);
     });
 
-    app.get("/joined-event", async (req, res) => {
+    app.get("/joined-event", verifyToken, async (req, res) => {
       const email = req.query.email;
       const result = await joinedCollection
         .find({ createdBy: email })
@@ -195,11 +212,11 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/joined-event/:id", async (req, res) => {
+    app.delete("/joined-event/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const query = ObjectId.isValid(id)
-          ? { _id: { $in: [id, new ObjectId(id)] } } // match both string or ObjectId
+          ? { _id: { $in: [id, new ObjectId(id)] } }
           : { _id: id };
 
         const result = await joinedCollection.deleteOne(query);
@@ -220,8 +237,6 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 run().catch(console.dir);

@@ -1,2 +1,3 @@
 node_modules
-social-events.json
+.env
+socialKey.json
