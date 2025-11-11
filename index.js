@@ -10,7 +10,11 @@ app.use(express.json());
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./socialKey.json");
+// index.js
+const decoded = Buffer.from(process.env.FIREBASE_SOCIAL_KEY, "base64").toString(
+  "utf8"
+);
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -56,7 +60,7 @@ const verifyToken = async (req, res, next) => {
 
 async function run() {
   try {
-    // await client.connect();
+    await client.connect();
 
     const db = client.db("social_db");
     const eventsCollection = db.collection("events");
@@ -204,14 +208,44 @@ async function run() {
     });
 
     app.post("/joined", verifyToken, async (req, res) => {
-      const data = req.body;
+      const {
+        eventId,
+        title,
+        description,
+        eventType,
+        thumbnail,
+        location,
+        date,
+      } = req.body;
 
       // Attach the logged-in user's email to the joined event
-      data.createdBy = req.user.email;
-      data.joinedAt = new Date();
+      const joinedData = {
+        eventId,
+        title,
+        description,
+        eventType,
+        thumbnail,
+        location,
+        date,
+        joinedBy: req.user.email,
+        joinedAt: new Date(),
+      };
 
       try {
-        const result = await joinedCollection.insertOne(data);
+        const alreadyJoined = await joinedCollection.findOne({
+          eventId: eventId,
+          joinedBy: req.user.email,
+        });
+
+        if (alreadyJoined) {
+          return res.status(400).send({
+            success: false,
+            message: "You have already joined this event.",
+          });
+        }
+
+        const result = await joinedCollection.insertOne(joinedData);
+
         res.send({ success: true, insertedId: result.insertedId });
       } catch (error) {
         console.error("Error joining event:", error);
@@ -224,8 +258,8 @@ async function run() {
     app.get("/joined-event", verifyToken, async (req, res) => {
       const email = req.query.email;
       const result = await joinedCollection
-        .find({ createdBy: email })
-        .sort({ date: -1 })
+        .find({ joinedBy: email })
+        .sort({ joinedAt: 1 })
         .toArray();
       res.send(result);
     });
@@ -260,5 +294,5 @@ async function run() {
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`Server is listening on port ${port}`);
+  console.log(`KindEarth Server is listening on port ${port}`);
 });
