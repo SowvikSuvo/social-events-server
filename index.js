@@ -218,22 +218,27 @@ async function run() {
         date,
       } = req.body;
 
-      // Attach the logged-in user's email to the joined event
-      const joinedData = {
-        eventId,
-        title,
-        description,
-        eventType,
-        thumbnail,
-        location,
-        date,
-        joinedBy: req.user.email,
-        joinedAt: new Date(),
-      };
-
       try {
+        let convertedDate = null;
+        if (date) {
+          const [day, month, year] = date.split("-");
+          convertedDate = new Date(`${year}-${month}-${day}`);
+        }
+
+        const joinedData = {
+          eventId,
+          title,
+          description,
+          eventType,
+          thumbnail,
+          location,
+          date: convertedDate,
+          joinedBy: req.user.email,
+          joinedAt: new Date(),
+        };
+
         const alreadyJoined = await joinedCollection.findOne({
-          eventId: eventId,
+          eventId,
           joinedBy: req.user.email,
         });
 
@@ -259,9 +264,21 @@ async function run() {
       const email = req.query.email;
       const result = await joinedCollection
         .find({ joinedBy: email })
-        .sort({ joinedAt: 1 })
+        .sort({ date: 1 })
         .toArray();
-      res.send(result);
+
+      const formattedResult = result.map((item) => {
+        const dateObj = new Date(item.date);
+        const day = String(dateObj.getDate()).padStart(2, "0");
+        const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const year = dateObj.getFullYear();
+        return {
+          ...item,
+          date: `${day}-${month}-${year}`,
+        };
+      });
+
+      res.send(formattedResult);
     });
 
     app.delete("/joined-event/:id", verifyToken, async (req, res) => {
