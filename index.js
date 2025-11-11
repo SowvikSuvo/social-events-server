@@ -83,20 +83,26 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/events/:id", async (req, res) => {
+    app.put("/events/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const data = req.body;
+
       const existing = await eventsCollection.findOne({
         _id: new ObjectId(id),
       });
 
-      if (existing.createdBy !== data.createdBy) {
+      if (!existing) {
+        return res.status(404).send({ message: "Event not found" });
+      }
+      // Only allow event creator to update
+      if (existing.createdBy !== req.user.email) {
         return res
           .status(403)
           .send({ message: "Unauthorized: Cannot update others’ events" });
       }
-
-      delete data.createdBy;
+      if ("createdBy" in data) {
+        delete data.createdBy;
+      }
 
       const objectId = new ObjectId(id);
       const result = await eventsCollection.updateOne(
