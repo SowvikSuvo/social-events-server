@@ -45,6 +45,7 @@ const verifyToken = async (req, res, next) => {
   }
   try {
     const decode = await admin.auth().verifyIdToken(token);
+    req.user = decode;
     next();
   } catch (error) {
     res.status(401).send({
@@ -61,7 +62,7 @@ async function run() {
     const eventsCollection = db.collection("events");
     const joinedCollection = db.collection("joined");
 
-    app.post("/events", async (req, res) => {
+    app.post("/events", verifyToken, async (req, res) => {
       const newEvent = req.body;
 
       const result = await eventsCollection.insertOne(newEvent);
@@ -74,7 +75,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/events/:id", async (req, res) => {
+    app.get("/events/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await eventsCollection.findOne(query);
@@ -199,8 +200,19 @@ async function run() {
     app.post("/joined", verifyToken, async (req, res) => {
       const data = req.body;
 
-      const result = await joinedCollection.insertOne(data);
-      res.send(result);
+      // Attach the logged-in user's email to the joined event
+      data.createdBy = req.user.email;
+      data.joinedAt = new Date();
+
+      try {
+        const result = await joinedCollection.insertOne(data);
+        res.send({ success: true, insertedId: result.insertedId });
+      } catch (error) {
+        console.error("Error joining event:", error);
+        res
+          .status(500)
+          .send({ success: false, message: "Failed to join event" });
+      }
     });
 
     app.get("/joined-event", verifyToken, async (req, res) => {
