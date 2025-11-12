@@ -60,7 +60,7 @@ const verifyToken = async (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("social_db");
     const eventsCollection = db.collection("events");
@@ -311,5 +311,5 @@ async function run() {
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`KindEarth Server is listening on port ${port}`);
+  console.log(` Server is listening on port ${port}`);
 });
